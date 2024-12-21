@@ -1,8 +1,8 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -O2 -fopenmp -Wall -Wextra 
+CXXFLAGS = -std=c++17 -fopenmp -Wall -Wextra 
 
 # Source files
-SRCS = main.cpp hyperloglog.cpp
+SRCS = main.cpp
 # Object files
 OBJS = $(SRCS:.cpp=.o)
 # Output binary

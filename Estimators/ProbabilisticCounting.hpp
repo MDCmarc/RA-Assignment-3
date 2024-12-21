@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <fstream>
 
-#include "CardinalityEstimator.h"
+#include "CardinalityEstimator.hpp"
 
 using std::string;
 
@@ -22,7 +22,7 @@ public:
               phiM_(m_ * (1.0 / 0.77351))
     {};
 
-    uint32_t EstimateCardinality(const string &path);
+    uint32_t EstimateCardinality(const string &path) const;
 
 private:
     const uint32_t m_;
@@ -31,7 +31,7 @@ private:
 };
 
 
-uint32_t ProbabilisticCounting::EstimateCardinality(const string& path) {
+uint32_t ProbabilisticCounting::EstimateCardinality(const string& path) const {
     std::ifstream file(path);
     string word;
 

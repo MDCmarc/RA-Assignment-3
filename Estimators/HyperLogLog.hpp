@@ -9,7 +9,7 @@
 #include <algorithm>
 #include <fstream>
 
-#include "CardinalityEstimator.h"
+#include "CardinalityEstimator.hpp"
 
 using std::string;
 
@@ -22,7 +22,7 @@ public:
           alphaMM_(computeAlphaMM(m))
     {};
 
-    uint32_t EstimateCardinality(const string& path);
+    uint32_t EstimateCardinality(const string& path) const;
 
 private:
     static double computeAlphaMM(uint32_t m);
@@ -52,7 +52,7 @@ double HyperLogLog::computeAlphaMM(const uint32_t m) {
     return alpha * m * m;
 }
 
-uint32_t HyperLogLog::EstimateCardinality(const string& path) {
+uint32_t HyperLogLog::EstimateCardinality(const string& path) const {
     std::ifstream file(path);
     string word;
 

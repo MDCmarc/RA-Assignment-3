@@ -1,0 +1,16 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "main",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/main",
+      // "args": ["-f", "dracula.txt", "-p", "64"],
+      "args": ["-n", "4", "-N", "2992", "-a", "0.183"],
+      "environment": [{ "name": "config", "value": "Debug" }],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": true,
+    }
+  ]
+}

@@ -10,7 +10,7 @@
 #include <fstream>
 #include <set>
 
-#include "CardinalityEstimator.h"
+#include "CardinalityEstimator.hpp"
 
 using std::string;
 
@@ -20,13 +20,13 @@ public:
             : CardinalityEstimator(seed), k_(k)
     {};
 
-    uint32_t EstimateCardinality(const string& path);
+    uint32_t EstimateCardinality(const string& path) const;
 
 private:
     const uint32_t k_;
 };
 
-uint32_t Recordinality::EstimateCardinality(const string& path) {
+uint32_t Recordinality::EstimateCardinality(const string& path) const {
     std::ifstream file(path);
     string word;
 

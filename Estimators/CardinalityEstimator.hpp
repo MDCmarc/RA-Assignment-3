@@ -6,7 +6,7 @@
 #define RA_3_CARDINALITY_ESTIMATOR_H
 
 #include <cstdint>
-#include "../common/xxhash.hpp"
+#include "../utils/xxhash.hpp"
 
 using std::string;
 
@@ -42,7 +42,7 @@ constexpr uint32_t CardinalityEstimator::ExtractLowBits(const uint32_t value, co
 
 // Given a start position [0-31], returns the position of the first bit set to 1 in the range [1-32]
 constexpr uint8_t CardinalityEstimator::FindFirstSetBit(const uint32_t tail, const uint8_t start_pos) {
-    int clz = __builtin_clzl(tail);
+    int clz = __builtin_clz(tail);
     int adjusted_clz = std::max(clz - static_cast<int>(start_pos), 0);
     return static_cast<uint8_t>(adjusted_clz + 1); // Range 1-32
 }
