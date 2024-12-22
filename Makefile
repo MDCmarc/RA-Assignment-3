@@ -1,12 +1,13 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -fopenmp -Wall -Wextra 
+CXXFLAGS = -std=c++17 -fopenmp -Wall -Wextra -O2
 
 # Source files
+#SRCS = utils/main.cpp
 SRCS = main.cpp
 # Object files
 OBJS = $(SRCS:.cpp=.o)
 # Output binary
-TARGET = main
+TARGET = Cardinality
 
 # Default target
 all: $(TARGET)
