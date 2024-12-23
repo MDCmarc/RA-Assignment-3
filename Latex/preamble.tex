@@ -1,0 +1,178 @@
+\usepackage[a4paper, heightrounded, headheight=14pt, margin=0.8in]{geometry}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[english]{babel} 
+
+% Graphics and Floats
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{incgraph}
+\usepackage{tikz}
+\usepackage{pgfplots} \pgfplotsset{compat=1.18}
+\usepackage{wrapfig}
+\usepackage{multirow}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{ragged2e}
+
+% Tables
+\usepackage{booktabs} % \toprule \midrule \bottomrule
+\usepackage{tabularray}
+\usepackage{tabularx} % Size auto in table using X
+
+% Math and Symbols
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{cancel}
+\usepackage{bm} % Bold mmath symbols
+\usepackage{textcomp} % More symbols
+
+% Typography
+\usepackage{fancyhdr}
+\usepackage{widows-and-orphans}
+\usepackage{xspace}
+\usepackage[indent]{parskip}
+\usepackage{indentfirst}
+\usepackage[final,nopatch=footnote]{microtype}
+\usepackage[all]{nowidow}
+\usepackage[table]{xcolor}
+% Colours
+\usepackage{xcolor}
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+\definecolor{dkgreen}{rgb}{0,0.6,0}
+\definecolor{gray}{rgb}{0.5,0.5,0.5}
+\definecolor{mauve}{rgb}{0.58,0,0.82}
+\definecolor{gray}{rgb}{0.4,0.4,0.4}
+\definecolor{darkblue}{rgb}{0.0,0.0,0.6}
+\definecolor{lightblue}{rgb}{0.0,0.0,0.9}
+\definecolor{cyan}{rgb}{0.0,0.6,0.6}
+\definecolor{darkred}{rgb}{0.6,0.0,0.0}
+
+% Code Listings
+\usepackage{listings}[captionpos=b]
+\usepackage{minted} % Code listing 2
+\usepackage{fancyvrb} % Better verbatim
+\usepackage[ruled,vlined,linesnumbered]{algorithm2e} % Pseudocode
+
+\lstset{
+  basicstyle=\ttfamily\footnotesize,
+  columns=fullflexible,
+  showstringspaces=false,
+  numbers=left,                  
+  numberstyle=\tiny\color{codegray},
+  commentstyle=\color{codegreen}\upshape,
+  stepnumber=1,
+  numbersep=5pt,
+  backgroundcolor=\color{white},   
+  showspaces=false,
+  showstringspaces=false,
+  showtabs=false,
+  frame=none,
+  rulecolor=\color{black},        % if not set, the frame-color may be changed on line-breaks within not-black text (e.g. commens (green here))
+  tabsize=2,
+  captionpos=b,
+  breaklines=true,
+  breakatwhitespace=false,
+  title=\lstname,
+  keepspaces=true                
+}
+
+\lstdefinestyle{c++style}{
+    language=C++,
+    backgroundcolor=\color{backcolour},   
+    keywordstyle=\color{magenta},
+    stringstyle=\color{codepurple},
+    frame=none,
+    escapechar={ç}, 
+}
+
+% OPTIONAL
+\usepackage{fontawesome5}
+\usepackage{import}
+%\usepackage{svg}
+
+% Bibliography and Gloassries
+\usepackage[style=ieee, sorting=none]{biblatex}
+\addbibresource{references.bib}
+\usepackage{csquotes}
+%\usepackage{glossaries}
+
+% ------------------
+% Custom Enviroments
+% ------------------
+\newcommand{\quotes}[1]{``#1''}
+
+\renewcommand{\tt}[1]{\texttt{#1}}
+
+\newcommand{\plotnodes}[1]{
+    \begin{tikzpicture}
+        \begin{axis}[
+            xlabel={Number of Threads},
+            ylabel={Execution Time (s)},
+            %xmin=0, xmax=16,
+            grid=major,
+            width=16cm, 
+            height=6cm,
+            xtick={1, 2, 4, 8, 16},
+            enlargelimits=0.15,
+            legend style={at={(0.5,1.05)}, anchor=south, legend columns=-1}
+        ]
+        \addplot[mark=square*, color=darkblue, thick,
+                 nodes near coords, every node near coord/.append style={anchor=north east} ] 
+        coordinates {
+            #1
+        };
+        \addlegendentry{Execution Time}
+        \end{axis}
+    \end{tikzpicture}
+}
+
+\newcommand{\plottwonodes}[2]{
+    \begin{tikzpicture}
+        \begin{axis}[
+            xlabel={Number of Threads},
+            ylabel={Execution Time (s)},
+            xmin=0, xmax=16,
+            grid=major,
+            width=16cm, 
+            height=6cm,
+            xtick={1, 2, 4, 8, 16},
+            enlargelimits=0.15,
+            legend style={at={(0.5,1.05)}, anchor=south, legend columns=-1}
+        ]
+        \addplot[mark=square*, color=darkblue, thick,
+                 nodes near coords, every node near coord/.append style={anchor=south west} ] 
+        coordinates {
+            #1
+        };
+        \addlegendentry{Explicit Tasks}
+        \addplot+[mark=square*, color=darkred, thick,
+                  nodes near coords, every node near coord/.append style={anchor=north east} ] 
+        coordinates {
+            #2
+        };
+        \addlegendentry{Implicit Tasks (do-across)}
+        \end{axis}
+    \end{tikzpicture}
+}
+
+
+%\newenvironment{warning}
+%  {\par\begin{mdframed}[linewidth=1pt,linecolor=red]%
+%    \begin{list}{}{\leftmargin=1cm
+%                   \labelwidth=\leftmargin}\item[\Large\ding{43}]}
+%  {\end{list}\end{mdframed}\par}
+
+%\newenvironment{poliabstract}[1]
+%    {\renewcommand{\abstractname}{#1}\begin{abstract}\indent}
+%    {\end{abstract}}
+
+%\usepackage{fvextra}
+%\newcommand{\wraptext}[2]{\underbrace{#1}_{\substack{#2}}}% fvextra package
+
+    

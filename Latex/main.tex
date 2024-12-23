@@ -1,0 +1,404 @@
+\documentclass[a4paper, 11pt]{article}
+\input{preamble}
+
+\title{Randomized Algorithms (RA-MIRI): \\
+        Assignment \#3
+        }
+\author{%   
+    Marc Díaz (marc.diaz.calderon@estudiantat.upc.edu) 
+}
+\date{December 2024}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyfoot[C]{\thepage}
+\fancyhead[L]{RA - Assigment 3: Cardinality Estimation} 
+\fancyhead[R]{Marc Díaz Calderón}
+
+
+\begin{document}
+\maketitle
+
+\section{Code Solution}
+The code solution has been implemented in C++ and can be found in \href{https://github.com/MDCmarc/RA-Assigment3}{this GitHub repo} - (https://github.com/MDCmarc/RA-Assigment3). The python notebook \texttt{data.ipynb} has been used to run the simulations and generate the LaTeX tables.
+
+For this assignment, we were asked to implement different cardinality estimator algorithms. To make the code more structured, easier to test and to add new estimators, a base class called \tt{CardinalityEstimator} was created. It implements basic functionalities that specific implementations may need. That is, some functions for bit manipulation and the hashing function. As for cardinality estimation, a good hashing function is required, we used the \tt{xxhash} library \cite{xxHash} port to \tt{C++ 17} implemented by Red Gavin \cite{xxHashPort} which can be found in \href{https://github.com/RedSpah/xxhash_cpp}{GitHub}. This base class contains the following:
+\begin{itemize}
+    \item The constructor of this base class requires as \textit{seed} which will be used in the hash function to make the results obtained replicable.
+    \item Then the hashing function. In our implementation of the estimators, we used 32-bit hashing, however, it can be modified for 64-bit hashing. This function is just a wrapper for the call to \tt{xxhash}.
+        \begin{lstlisting}[style=c++style]
+uint32_t ComputeXXHash32(const string& input) const {
+    return xxh::xxhash<32>(input.c_str(), input.size(), seed_);
+}\end{lstlisting}\vspace*{-2em}
+    
+    \item A function to extract the first $b$ bits:
+    \begin{lstlisting}[style=c++style]
+uint32_t ExtractHighBits( uint32_t value, const uint8_t pos ) {
+    return value >> (32 - pos);
+}\end{lstlisting}
+    
+    \vspace*{-2em}
+    \item A function to extract the lowest $b$ bits:
+    \begin{lstlisting}[style=c++style]
+uint32_t ExtractLowBits( uint32_t value, const uint8_t pos ) {
+    return value & ((1UL << (32 - pos)) - 1);
+}\end{lstlisting}\vspace*{-2em}
+
+    \item And lastly, a function to count the position of the first bit set to $1$, given an initial position. For this function, we use the built-in compiler function \quotes{count leading zeros}\footnote{When compiling on Linux with the \tt{g++} compiler, appending \tt{l} for long values \tt{\_\_builtin\_clzl} returned incorrect results, producing an erroneous range of 64 instead of 1-32. In contrast, on Windows using CLion, the explicit call to \tt{\_\_builtin\_clzl} was necessary to obtain the correct range of 1-32.}.
+        \begin{lstlisting}[style=c++style]
+uint8_t FindFirstSetBit( const uint32_t tail, const uint8_t start_pos ) {
+    int adjusted_clz = std::max((int)__builtin_clz(tail) - static_cast<int>(start_pos), 0);
+    return static_cast<uint8_t>(adjusted_clz + 1); // Range 1-32
+}\end{lstlisting}
+
+\end{itemize}
+
+\newpage
+
+\subsection{Recordinality}
+The first cardinality estimator implemented is based on the paper by \textcite{Recordinality} and the slides of the course. This approach requires $k$ registers to store $k$ hash values and a counter. Our implementation is described in Algorithm~\ref{algo:EstimateCardinality}
+
+\begin{algorithm}[H]
+    \caption{Estimate Cardinality (Recordinality)}
+    \label{algo:EstimateCardinality}
+    \SetAlgoLined
+    \SetKwInOut{Input}{Input}
+    \SetKwInOut{Output}{Output}
+    \Input{
+        $file$ -- File containing stream of words \\
+        $k$ -- Number of records to use
+    }
+    \Output{ Estimated cardinality of the set of words}
+    \BlankLine
+
+    \SetKwFunction{ComputeHash}{ComputeXXHash32}
+
+    $S \gets \{\}$\; 
+    $r \gets 0$\;
+
+    \BlankLine
+    \While{$r < k$ \textbf{and} \textbf{read} $word$ \textbf{from} $file$}{
+        $y \gets$ \ComputeHash{$word$}\;
+        \If{$y \notin S$}{
+            $S \gets S \cup \{y\}$\;
+            $r \gets r + 1$\;
+        }
+    }
+
+    \BlankLine
+    \While{\textbf{read} $word$ \textbf{from} $file$}{
+        $y \gets$ \ComputeHash{$word$}\;
+        \If{$y > $min$(S)$ \textbf{and} $y \notin S$}{
+            $S \gets ( S \setminus \{ $min$(S)\} ) \cup \{y\} $\;
+            $r \gets r + 1$\;
+        }
+    }
+
+    \BlankLine
+    $E \gets k \cdot (1 + \frac{1}{k})^{(r - k + 1)} - 1$\;
+    \Return $E$\;
+\end{algorithm}
+
+
+\subsection{HyperLogLog}
+For the HyperLogLog estimator, we just require $m$ registers of $\le 8$ bits. For the $\alpha_m$ we follow the values proposed in the original paper \textcite{HyperLogLog}. That is: $\alpha_{16} = 0.673$, $\alpha_{32} = 0.697$, $\alpha_{64} = 0.709$, and for $m \ge 128$, $\alpha_{m} = 0.7213/(1+1.079/m)$. After calculating the estimator, we apply the corrections proposed. The algorithm can be seen in \ref{algo:EstimateCardinalityHLL}.
+
+\begin{algorithm}[H]
+    \caption{Estimate Cardinality (HyperLogLog)}
+    \label{algo:EstimateCardinalityHLL}
+    \SetAlgoLined
+    \SetKwInOut{Input}{Input}
+    \SetKwInOut{Output}{Output}
+    \Input{         
+        $file$ -- File containing stream of words \\
+        $m$ -- Number of registers to use \\
+        $\alpha_m$ -- Correcting factor}
+    \Output{ Estimated cardinality of the set of words}
+    \BlankLine
+
+    \SetKwFunction{ComputeHash}{ComputeXXHash32}
+    \SetKwFunction{ExtractHighBits}{ExtractHighBits}
+    \SetKwFunction{ExtractLowBits}{ExtractLowBits}
+    \SetKwFunction{FindFirstSetBit}{FindFirstSetBit}
+    \SetKwFunction{ApplyCorrection}{ApplyCorrection}
+
+    Initialize $R[0 \dots m-1] \gets \{0\}$\; % $m$ registers (each $\leq 5$ bits)
+
+    \BlankLine
+    \While{\textbf{read} $word$ \textbf{from} $file$}{
+        $y \gets$ \ComputeHash{$word$}\;
+        $head \gets$ \ExtractHighBits{$y$, $log_m$}\;
+        $tail \gets$ \ExtractLowBits{$y$, $log_m$}\;
+        $R[head] \gets \max(R[head],$ \FindFirstSetBit{$tail$, $log_m$}$)$\;
+    }
+
+    \BlankLine
+
+     $E \gets \alpha_m m^2 \cdot \left(  \sum_{j=0}^{m-1} 2^{-R[j]} \right)^{-1}$\; 
+    
+    \Return \ApplyCorrection{$E$}\;
+\end{algorithm}
+
+
+\subsection{Probabilistic Counting}
+Lastly, as an optional estimator, we implemented the Probabilistic Counting, that, as it uses far more memory, may provide better results. This algorithm, shown in \ref{algo:PCSA} uses $m$ registers of $32$ bits.
+
+\begin{algorithm}[H]
+    \caption{Estimate Cardinality (Probabilistic Counting)}
+    \label{algo:PCSA}
+    \SetAlgoLined
+    \SetKwInOut{Input}{Input}
+    \SetKwInOut{Output}{Output}
+    \Input{ 
+        $file$ -- File containing stream of words \\
+        $m$ -- Number of registers to use \\
+        $\phi$ -- Correcting factor
+    }
+    \Output{ Estimated cardinality of the set of words}
+    \BlankLine
+
+    \SetKwFunction{ComputeHash}{ComputeXXHash32}
+    \SetKwFunction{ExtractHighBits}{ExtractHighBits}
+    \SetKwFunction{ExtractLowBits}{ExtractLowBits}
+    \SetKwFunction{FindFirstSetBit}{FindFirstSetBit}
+
+    Initialize $bmap[m][32] \gets \{0$\}\;
+
+    \BlankLine
+    \While{\textbf{read} $word$ \textbf{from} $file$}{
+        $y \gets$ \ComputeHash{$word$}\;
+        $head \gets$ \ExtractHighBits{$y$, $log_m$}\;
+        $tail \gets$ \ExtractLowBits{$y$, $log_m$}\;
+        $Zeros \gets$ \FindFirstSetBit{$tail$, $log_m$} $ - 1$\;
+        $bmap[head][Zeros] \gets 1$\;
+    }
+
+    \BlankLine
+
+    $E \gets m \cdot \phi \cdot 2^{\frac{1}{m} \sum_{j=0}^{m-1} \left(\arg\min_{0 \leq p \leq 31} \{ bmap[j][p] = 0 \} \right)}$\; % (11101) -> p = 3 
+    
+    \Return {$E$}\;
+\end{algorithm}
+
+
+\subsection{Generating Synthetic Data Streams}
+Lastly, we created a synthetic data stream generator that follows a Zipfian law of parameter $\alpha$. The implementation can be seen in Algorithm~\ref{algo:SyntheticDataStream}. As the presented algorithms read each word from a file, this generator also writes the output into a file named \tt{random\_stream-n-N-$\alpha$.txt}.  
+
+\begin{algorithm}[H]
+    \caption{Synthetic Data Stream Generation}
+    \label{algo:SyntheticDataStream}
+    \SetAlgoLined
+    \SetKwInOut{Input}{Input}
+    \SetKwInOut{Output}{Output}
+    \Input{ 
+        $n$ -- Number of unique elements \\
+        $N$ -- Total size of the stream \\
+        $\alpha$ -- Law parameter
+    }
+    \Output{ Synthetic stream of size $N$ }
+    \BlankLine
+
+    \SetKwFunction{PartialSum}{PartialSum}
+    \SetKwFunction{LowerBound}{LowerBound}
+
+    \BlankLine
+    $C_n \gets (\sum_{i=1}^{n}{ i^{-\alpha}})^{-1}$\;
+
+    \BlankLine
+    \For{$i \gets 1$ \textbf{to} $n$}{
+        $P[i] \gets C_n / i^{\alpha}$\;
+    }
+
+    \BlankLine
+    $C \gets$ \PartialSum{$P$}\;
+
+    \BlankLine
+    \For{$j \gets 1$ \textbf{to} $N$}{
+        \textbf{Get} $x \in [0.0, 1.0]$ \textbf{at random}\;
+        $c \gets$ \LowerBound{$C, x$}\;
+        \textbf{write} $c$\;
+    }
+\end{algorithm}
+
+Where \tt{PartialSum} just accumulates the probabilities and \tt{LowerBound} returns to the first element greater than $x$.
+
+
+For all random number generation, we used the \texttt{mt19937} random engine, which is based on the classic Mersenne Twister algorithm~\cite{MersenneTwister}. 
+
+\clearpage
+\section{Experimentation}
+
+We initiated our experimentation by analysing the impact of the parameter values, $k$ for Recordinality and $m$ for HyperLogLog and Probabilistic Counting, on the average and standard error divided $n$ of the cardinality estimation. To this end, we conducted 10,000 simulations using the \textit{Dracula} dataset. The seed is just the simulation number $\in [1, 10 000]$. The results are summarized in Table~\ref{tab:dracula}.
+\begin{table}[ht]
+    \centering
+    \renewcommand{\arraystretch}{1.5} % Adjust row height for better readability
+    \newcolumntype{C}{>{\centering\arraybackslash}X} 
+    \begin{tabularx}{\textwidth}{c|C|C|C|C|C|C}
+        \toprule
+        \multirow{2}{*}{\textbf{Parameter}} & 
+        \multicolumn{2}{c|}{\textbf{Recordinality}} & 
+        \multicolumn{2}{c|}{\textbf{HyperLogLog}} & 
+        \multicolumn{2}{c}{\textbf{Probabilistic Counting}} \\
+        \cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
+        & \textbf{Avg.} & \textbf{Error} & \textbf{Avg.} & \textbf{Error} & \textbf{Avg.} & \textbf{Error} \\
+        \midrule
+            \textbf{16} & 9442 & 0.64 & 9413 & 0.28 & 9613 & 0.20 \\ 
+            \textbf{32} & 9420 & 0.40 & 9416 & 0.19 & 9526 & 0.14 \\ 
+            \textbf{64} & 9413 & 0.25 & 9405 & 0.13 & 9464 & 0.10 \\ 
+            \textbf{128} & 9432 & 0.16 & 9417 & 0.09 & 9448 & 0.07 \\ 
+            \textbf{256} & 9420 & 0.10 & 9418 & 0.06 & 9439 & 0.05 \\ 
+            \textbf{512} & 9423 & 0.06 & 9421 & 0.04 & 9430 & 0.03 \\ 
+        \bottomrule\bottomrule
+    \end{tabularx}
+    \caption{Comparison of average estimated cardinality (\textbf{Avg.}) and empirical standard error divided by $n$ (\textbf{Error}) across three methods: Recordinality, HyperLogLog, and Probabilistic Counting. Results are based on 10,000 simulations using the dataset \textit{Dracula}, with a true cardinality of \( n = 9425 \).}
+    \label{tab:dracula}
+\end{table}
+
+As can be seen, the empirical standard error decreases consistently as the parameter (and consequently the memory usage) increases. This aligns with theoretical expectations, as greater memory allows for a more precise representation of the data, thus reducing variability in the estimates. Also, we see how Probabilistic Counting (PCSA), which inherently uses more memory, achieves the lowest error across all parameter values. As the parameter grows larger, the differences in errors among the three methods become negligible. We can also this pattern in the same experiment conducted with datasets \textit{A Midsummer Night's Dream} (Table~\ref{tab:shakespeare}) and \textit{Don Quijote de la Mancha} (Table~\ref{tab:Cervantes}), which represent smaller and significantly larger cardinalities, respectively.
+
+\begin{table}[ht]
+    \centering
+    \renewcommand{\arraystretch}{1.5} % Adjust row height for better readability
+    \newcolumntype{C}{>{\centering\arraybackslash}X} 
+    \begin{tabularx}{\textwidth}{c|C|C|C|C|C|C}
+        \toprule
+        \multirow{2}{*}{\textbf{Parameter}} & 
+        \multicolumn{2}{c|}{\textbf{Recordinality}} & 
+        \multicolumn{2}{c|}{\textbf{HyperLogLog}} & 
+        \multicolumn{2}{c}{\textbf{Probabilistic Counting}} \\
+        \cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
+        & \textbf{Avg.} & \textbf{Error} & \textbf{Avg.} & \textbf{Error} & \textbf{Avg.} & \textbf{Error} \\
+        \midrule
+            \textbf{16} & 3143 & 0.55 & 3137 & 0.28 & 3202 & 0.20 \\ 
+            \textbf{32} & 3135 & 0.34 & 3139 & 0.19 & 3170 & 0.14 \\ 
+            \textbf{64} & 3136 & 0.22 & 3136 & 0.13 & 3157 & 0.10 \\ 
+            \textbf{128} & 3137 & 0.13 & 3140 & 0.09 & 3146 & 0.07 \\ 
+            \textbf{256} & 3132 & 0.08 & 3136 & 0.06 & 3141 & 0.05 \\ 
+            \textbf{512} & 3135 & 0.04 & 3137 & 0.04 & 3154 & 0.03 \\ 
+        \bottomrule\bottomrule
+    \end{tabularx}
+    \caption{Comparison of average estimated cardinality (\textbf{Avg.}) and empirical standard error divided by $n$ (\textbf{Error}) across three methods: Recordinality, HyperLogLog, and Probabilistic Counting. Results are based on 10,000 simulations using the dataset \textit{A Midsummer Night's Dream}, with a true cardinality of \( n = 3136 \).}
+    \label{tab:shakespeare}
+\end{table}
+
+\begin{table}[ht]
+    \centering
+    \renewcommand{\arraystretch}{1.5} % Adjust row height for better readability
+    \newcolumntype{C}{>{\centering\arraybackslash}X} 
+    \begin{tabularx}{\textwidth}{c|C|C|C|C|C|C}
+        \toprule
+        \multirow{2}{*}{\textbf{Parameter}} & 
+        \multicolumn{2}{c|}{\textbf{Recordinality}} & 
+        \multicolumn{2}{c|}{\textbf{HyperLogLog}} & 
+        \multicolumn{2}{c}{\textbf{Probabilistic Counting}} \\
+        \cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
+        & \textbf{Avg.} & \textbf{Error} & \textbf{Avg.} & \textbf{Error} & \textbf{Avg.} & \textbf{Error} \\
+        \midrule
+        \textbf{16} & 22968 & 0.67 & 23043 & 0.27 & 23505 & 0.20 \\ 
+        \textbf{32} & 22985 & 0.43 & 23073 & 0.19 & 23282 & 0.14 \\ 
+        \textbf{64} & 23023 & 0.28 & 23057 & 0.13 & 23142 & 0.10 \\ 
+        \textbf{128} & 22992 & 0.18 & 23040 & 0.09 & 23096 & 0.07 \\ 
+        \textbf{256} & 23027 & 0.12 & 23050 & 0.06 & 23066 & 0.05 \\ 
+        \textbf{512} & 23045 & 0.07 & 23040 & 0.05 & 23056 & 0.03 \\ 
+        \bottomrule\bottomrule
+    \end{tabularx}
+    \caption{Comparison of average estimated cardinality (\textbf{Avg.}) and empirical standard error divided by $n$ (\textbf{Error}) across three methods: Recordinality, HyperLogLog, and Probabilistic Counting. Results are based on 10,000 simulations using the dataset \textit{Don Quijote de la Mancha}, with a true cardinality of \( n = 23034 \).}
+    \label{tab:Cervantes}
+\end{table}
+
+An important observation is the consistency in the standard error for HyperLogLog and Probabilistic Counting across all three datasets. This is because  the error for these two estimators depends solely on the parameter $m$, rather than the true cardinality $n$. On the other hand, for Recordinality, the error is influenced by $n$, as reflected in the results. For instance, with \textit{Quijote} ($n=23034$), the initial error is 0.67, while for \textit{A Midsummer Night's Dream} ($n=3136$), the error begins at 0.55.
+
+Until now, we have focused on comparing the effects of the parameters on the error, but we haven't addressed the accuracy of the estimators. Table~\ref{tab:Accuracy} presents the results from 10,000 simulations of the average cardinality estimator calculated using each method across all datasets. In this table, we show both the true cardinality and the accuracy of the estimators.
+
+\begin{table}[ht]
+    \centering
+    \renewcommand{\arraystretch}{1.5} % Adjust row height for better readability
+    \newcolumntype{C}{>{\hsize=0.50\hsize\centering\arraybackslash}X} 
+    \newcolumntype{L}{>{\centering\arraybackslash}X}
+    \begin{tabularx}{\textwidth}{L|C|C|C|C|C|C|C}
+        \toprule
+        \multirow{2}{*}{\textbf{Dataset}} & \multirow{2}{*}{\textbf{Card.}} &
+        \multicolumn{2}{c|}{\textbf{REC}} & 
+        \multicolumn{2}{c|}{\textbf{HLL}} & 
+        \multicolumn{2}{c}{\textbf{PCSA}} \\
+        \cmidrule(lr){3-4} \cmidrule(lr){5-6} \cmidrule(lr){7-8}
+        & & \textbf{Avg.} & \textbf{Acc.(\%)} & \textbf{Avg.} & \textbf{Acc.(\%)} & \textbf{Avg.} & \textbf{Acc.(\%)} \\
+        \midrule        
+        \textbf{mare-balena} & \textbf{5670} & 5656 & 99.7\% & 5662 & 99.9\% & 5696 & 99.5\% \\ 
+        \textbf{dracula} & \textbf{9425} & 9413 & 99.9\% & 9405 & 99.8\% & 9464 & 99.6\% \\ 
+        \textbf{quijote} & \textbf{23034} & 23023 & 100.0\% & 23057 & 99.9\% & 23142 & 99.5\% \\ 
+        \textbf{crusoe} & \textbf{6245} & 6246 & 100.0\% & 6234 & 99.8\% & 6274 & 99.5\% \\ 
+        \textbf{war-peace} & \textbf{17475} & 17516 & 99.8\% & 17464 & 99.9\% & 17554 & 99.5\% \\ 
+        \textbf{midsummer nights-dream} & \textbf{3136} & 3136 & 100.0\% & 3136 & 100.0\% & 3157 & 99.3\% \\ 
+        \textbf{valley-fear} & \textbf{5829} & 5854 & 99.6\% & 5827 & 100.0\% & 5858 & 99.5\% \\ 
+        \textbf{iliad} & \textbf{8925} & 8913 & 99.9\% & 8912 & 99.9\% & 8964 & 99.6\% \\ 
+        \bottomrule\bottomrule
+    \end{tabularx}
+    \caption{Comparison of average estimated cardinality (\textbf{Avg.}) and accuracy (\textbf{Acc.(\%)}) across three methods: Recordinality, HyperLogLog, and Probabilistic Counting. Results are based on 10,000 simulations over all the datasets provided.}
+    \label{tab:Accuracy}
+\end{table}
+
+From the table, we can observe that all three methods, Recordinality (REC), HyperLogLog (HLL), and Probabilistic Counting (PCSA), demonstrate high accuracy across the datasets. The average accuracy for each method is generally very close to 100\%. Specifically, Recordinality and HyperLogLog maintain accuracy percentages well above 99.6\%. On the other hand, although also performing very well, PCSA shows a slight drop in accuracy compared to the other two, which is interesting as it is the one that requires more memory.
+
+Finally, for this algorithms, a random sequence of words is expected. However, for stories like the ones provided in the datasets, we can not say that they are fully random. For this reason, we conducted the same experiments but with datasets formed using the Synthetic data stream generator previously described. Table~\ref{tab:random5000} shows the averages and errors for diferent parameter values for datasets of $N=40 000$ words where there are only $n = 5000$  distinct elements. The alpha value for the generation is $\alpha = 0.4$. Here also 10 000 simulation have been run with the seed being the simulation number.
+
+\begin{table}[ht]
+    \centering
+    \renewcommand{\arraystretch}{1.5} % Adjust row height for better readability
+    \newcolumntype{C}{>{\centering\arraybackslash}X} 
+    \begin{tabularx}{\textwidth}{c|C|C|C|C|C|C}
+        \toprule
+        \multirow{2}{*}{\textbf{Parameter}} & 
+        \multicolumn{2}{c|}{\textbf{Recordinality}} & 
+        \multicolumn{2}{c|}{\textbf{HyperLogLog}} & 
+        \multicolumn{2}{c}{\textbf{Probabilistic Counting}} \\
+        \cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
+        & \textbf{Avg.} & \textbf{Error} & \textbf{Avg.} & \textbf{Error} & \textbf{Avg.} & \textbf{Error} \\
+        \midrule
+        \textbf{16} & 4979 & 0.57 & 5006 & 0.28 & 5097 & 0.20 \\ 
+        \textbf{32} & 4998 & 0.37 & 4998 & 0.19 & 5045 & 0.14 \\ 
+        \textbf{64} & 4994 & 0.23 & 4993 & 0.13 & 5019 & 0.10 \\ 
+        \textbf{128} & 5002 & 0.15 & 4993 & 0.09 & 5004 & 0.07 \\ 
+        \textbf{256} & 4994 & 0.09 & 4994 & 0.06 & 4996 & 0.05 \\ 
+        \textbf{512} & 4990 & 0.05 & 4989 & 0.04 & 4992 & 0.03 \\ 
+        \bottomrule\bottomrule
+    \end{tabularx}
+    \caption{Similar experiment for a random stream that contains 5000 distinct elements.}
+    \label{tab:random5000}
+\end{table}
+
+Also, the same experiment but for $N=100 000$ words can be seen in \ref{tab:random20000} where there are $n = 20000$ distinct elements. As both parameters are much bigger, 30 000 simulations have been run. The alpha value for the generation is $\alpha = 0.5$.
+\begin{table}[ht]
+    \centering
+    \renewcommand{\arraystretch}{1.5} % Adjust row height for better readability
+    \newcolumntype{C}{>{\centering\arraybackslash}X} 
+    \begin{tabularx}{\textwidth}{c|C|C|C|C|C|C}
+        \toprule
+        \multirow{2}{*}{\textbf{Parameter}} & 
+        \multicolumn{2}{c|}{\textbf{Recordinality}} & 
+        \multicolumn{2}{c|}{\textbf{HyperLogLog}} & 
+        \multicolumn{2}{c}{\textbf{Probabilistic Counting}} \\
+        \cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
+        & \textbf{Avg.} & \textbf{Error} & \textbf{Avg.} & \textbf{Error} & \textbf{Avg.} & \textbf{Error} \\
+        \midrule
+        \textbf{16} & 19397 & 0.65 & 19377 & 0.27 & 19734 & 0.20 \\ 
+        \textbf{32} & 19476 & 0.42 & 19347 & 0.18 & 19524 & 0.14 \\ 
+        \textbf{64} & 19383 & 0.27 & 19364 & 0.13 & 19440 & 0.09 \\ 
+        \textbf{128} & 19370 & 0.17 & 19354 & 0.09 & 19390 & 0.07 \\ 
+        \textbf{256} & 19364 & 0.11 & 19348 & 0.06 & 19375 & 0.05 \\ 
+        \textbf{512} & 19350 & 0.07 & 19350 & 0.04 & 19360 & 0.03 \\ 
+        \bottomrule\bottomrule
+    \end{tabularx}
+    \caption{Similar experiment for a random stream that contains 20 000 distinct elements.}
+    \label{tab:random20000}
+\end{table}
+
+As we can see, for $n = 5000$ we still have a great accuracy of $99\%$. On the other hand, for 20 000 distinct elements, while the dataset \textit{El Quijote de la Mancha} had 23034 words with an accuracy of 100\%, we get an accuracy of $\le 97\%$, which is still good, but we can see the deterioration.
+
+\nocite{*}
+\printbibliography
+
+\end{document}
+
+
+
