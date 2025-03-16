@@ -1,4 +1,4 @@
-# RA-ASSIGMENT3
+# RA-Assignment3
 This project corresponds to the third assignment of the Randomized Algorithms course from the MIRI master's program at UPC.
 
 ## Structure
